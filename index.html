@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <title>Internet Archive</title>
+    <style>
+        /* Card */
+        .box { cursor: pointer; margin-top: 150px; width: 375px; height: 265px; padding: 20px; background-color: #01b6d1; position: absolute; left: 50%; margin-left: -185px; }
+        .title { text-align: center; font-size: 12px; font-weight: 800; letter-spacing: 1px; font-family: Verdana; color: rgba(0, 0, 0, 0.4); text-transform: uppercase; }
+        hr { width: 100%; }
+        .desc { font-family: museo; font-size: 30px; line-height: 36px; }
+        .logo { height: 75px; display: block; margin: auto; margin-top: 20px; }
+
+        /* Media Object */
+        .mediaTitle { white-space: nowrap; text-overflow: ellipsis; overflow: hidden;}
+
+        /* Dialog */
+        .modal-dialog { max-width: 900px; }
+        .modal-content { background: url(banner.jpg); }
+        .modal-body { color: #ffffff; }
+        .footer { background-color: #ffffff; color: #000000; padding: 25px; }
+    </style>
+</head>
+<body>
+    <!-- Card -->
+    <div class="box">
+        <div class="title">Internet Archive</div>
+        <hr>
+        <div class="desc">What's on Internet Archive the year you were born</div>
+        <img src="logo.png" class="logo">
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="modal" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <button type="button" class="close" data-dismiss="modal" style="width: 30px;"><span>&times;</span></button>
+                <div class="modal-body">
+
+                </div>
+                <div class="footer">Audio from the Internet Archive from the year <span class="year"></span>.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://unpkg.com/fs-js-lite@latest/dist/FamilySearch.min.js"></script>
+    <script type="text/javascript">
+        var fs = new FamilySearch({
+            environment: 'production',
+            appKey: 'a02j000000KTRjpAAH',
+            redirectUri: 'https://misbach.github.io/fs-internetarchive/'
+            // redirectUri: 'http://localhost:5000',
+            saveAccessToken: true,
+            tokenCookie: 'FS_AUTH_TOKEN'
+        });
+
+        // Login if not authenticated
+        var oauthResponseState = fs.oauthResponse(function (error, response) {
+            // Get user meta
+            fs.get('/platform/users/current', function (error, response) {
+                fs.user = response.data.users[0];
+            });
+            if (response.statusCode === 200) window.location = window.location.pathname;
+        });
+        if (!oauthResponseState && !fs.getAccessToken()) fs.oauthRedirect();
+        else {
+            fs.get("/platform/users/current", function (error, response) {
+                if (response.statusCode == 401) fs.oauthRedirect();
+                fs.user = response.data.users[0];
+            });
+        }
+
+        $('.box').click(function() {
+            $('.modal-body').empty();
+            $('#modal').modal('show');
+            let year = fs.user.birthDate.split(' ')[2];
+            $('.year').text(year);
+
+            // Search audio
+            let url = "https://bypasscors.herokuapp.com/api/?url=" + encodeURIComponent("https://archive.org/advancedsearch.php?q=mediatype%3A%28audio%29+AND+date%3A%5B"+year+"%5D&fl%5B%5D=identifier&fl%5B%5D=title&sort%5B%5D=&sort%5B%5D=&sort%5B%5D=&rows=50&page=1&output=json");
+            fetch(url).then(function (rsp) { return rsp.json() })
+            .then(function (items) {
+                for (let i = 0; i < 3; i++) {
+                    let id = items.response.docs[i].identifier;
+                    let title = items.response.docs[i].title;
+                    let img = "";
+
+                    // Get item meta
+                    fetch("https://archive.org/metadata/"+id).then(function (rsp) { return rsp.json() })
+                    .then(function (item) {
+                        // Loop until we find a file of type "MP3"
+                        for (let j = 0; j < item.files.length; j++) {
+                            if (item.files[j].format.indexOf("JPEG") != -1) {
+                                console.log(item.files[j].name);
+                                img = "https://archive.org/download/" + id + "/" + item.files[j].name;
+                                break;
+                            }
+                        }
+                        for (let j = 0; j < item.files.length; j++) {
+                            if (item.files[j].format.indexOf("MP3") != -1) {
+                                console.log(item);
+                                console.log(item.files[j]);
+                                // $('.audio').attr("src", "https://archive.org/download/"+id+"/"+item.files[j].name);
+                                $('.modal-body').append('\
+                                <div class="mediaTitle">'+title+'</div>\
+                                <audio controls><source src="'+ "https://archive.org/download/" + id + "/" + item.files[j].name+'" type="audio/mpeg"></audio>');
+                                break;
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
